@@ -23,38 +23,118 @@ router.get('/:id', async (req, res) => {
   res.json(event);
 });
 
-router.post('/', protect, admin, async (req, res) => {
-  const { name, description, instagram, website, ticketLink, image, address, date, city } = req.body;
-  const loc = await geocodeAddress(address);
-  let imageUrl = '';
-  if (image && image.trim() !== '') {
-    const upload = await cloudinary.uploader.upload(image, { folder: "events" });
-    imageUrl = upload.secure_url;
-  }
 
-  const event = await Event.create({
-    name,
-    description,
-    instagram,
-    website,
-    ticketLink,
-    address,
-    date,
-    city,
-    imageUrl,
-    location: loc
-  });
-
-  res.status(201).json(event);
-});
-
+// Update event
 router.put('/:id', protect, admin, async (req, res) => {
   try {
-    const updated = await Event.findByIdAndUpdate(req.params.id, req.body, { new: true });
-    if (!updated) return res.status(404).json({ message: 'Event not found' });
-    res.json(updated);
+    const event = await Event.findById(req.params.id);
+    if (!event) return res.status(404).json({ message: 'Event not found' });
+
+    const {
+      name,
+      description,
+      instagram,
+      website,
+      ticketLink,
+      address,
+      city,
+      price,
+      date,
+      location,
+      image
+    } = req.body;
+
+    // Upload new image if provided
+    if (image) {
+      const result = await cloudinary.uploader.upload(`data:image/jpeg;base64,${image}`);
+      event.imageUrl = result.secure_url;
+    }
+
+    // Update other fields
+    event.name = name;
+    event.description = description;
+    event.instagram = instagram;
+    event.website = website;
+    event.ticketLink = ticketLink;
+    event.address = address;
+    event.city = city;
+    event.price = price;
+    event.date = date;
+    event.location = location;
+
+    await event.save();
+    res.status(200).json(event);
   } catch (err) {
-    res.status(400).json({ message: err.message });
+    console.error('Error updating event:', err);
+    res.status(500).json({ message: 'Server error while updating event' });
+  }
+});
+
+// Create event
+router.post('/', protect, admin, async (req, res) => {
+  try {
+    const {
+      name,
+      description,
+      instagram,
+      website,
+      ticketLink,
+      address,
+      city,
+      price,
+      date,
+      location,
+      image
+    } = req.body;
+
+    let imageUrl = '';
+    if (image) {
+      const result = await cloudinary.uploader.upload(`data:image/jpeg;base64,${image}`);
+      imageUrl = result.secure_url;
+    }
+
+    const event = new Event({
+      name,
+      description,
+      instagram,
+      website,
+      ticketLink,
+      address,
+      city,
+      price,
+      date,
+      location,
+      imageUrl
+    });
+
+    await event.save();
+    res.status(201).json(event);
+  } catch (err) {
+    console.error('Error creating event:', err);
+    res.status(500).json({ message: 'Server error while creating event' });
+  }
+});
+
+// Get all events
+router.get('/', async (req, res) => {
+  try {
+    const events = await Event.find();
+    res.status(200).json(events);
+  } catch (err) {
+    res.status(500).json({ message: 'Error fetching events' });
+  }
+});
+
+// Delete event
+router.delete('/:id', protect, admin, async (req, res) => {
+  try {
+    const event = await Event.findById(req.params.id);
+    if (!event) return res.status(404).json({ message: 'Event not found' });
+
+    await event.deleteOne();
+    res.status(200).json({ message: 'Event deleted' });
+  } catch (err) {
+    res.status(500).json({ message: 'Error deleting event' });
   }
 });
 
