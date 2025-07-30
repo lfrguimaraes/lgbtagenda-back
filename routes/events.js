@@ -2,10 +2,12 @@
 const express = require('express');
 const router = express.Router();
 const { protect } = require('../middleware/authMiddleware');
-const { adminOnly } = require('../middleware/adminMiddleware');
+const { admin } = require('../middleware/adminMiddleware');
 const Event = require('../models/Event');
 const cloudinary = require('../utils/cloudinary');
 const { geocodeAddress } = require('../utils/geocode');
+const auth = require('../middleware/authMiddleware');
+//const admin = require('../middleware/adminMiddleware');
 
 router.get('/', async (req, res) => {
   const { city, date } = req.query;
@@ -21,7 +23,7 @@ router.get('/:id', async (req, res) => {
   res.json(event);
 });
 
-router.post('/', protect, adminOnly, async (req, res) => {
+router.post('/', protect, admin, async (req, res) => {
   const { name, description, instagram, website, ticketLink, image, address, date, city } = req.body;
   const loc = await geocodeAddress(address);
   let imageUrl = '';
@@ -44,6 +46,16 @@ router.post('/', protect, adminOnly, async (req, res) => {
   });
 
   res.status(201).json(event);
+});
+
+router.put('/:id', protect, admin, async (req, res) => {
+  try {
+    const updated = await Event.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    if (!updated) return res.status(404).json({ message: 'Event not found' });
+    res.json(updated);
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
 });
 
 module.exports = router;

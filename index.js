@@ -17,6 +17,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/events', eventRoutes);
 app.use('/api/tickets', ticketRoutes);
 
+
 app.get('/', (req, res) => {
   res.send('LGBT Agenda backend is running!');
 });

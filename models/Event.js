@@ -13,6 +13,7 @@ const EventSchema = new mongoose.Schema({
     lng: Number
   },
   city: String,
-  date: Date
+  date: Date,
+  price: Number
 });
 module.exports = mongoose.model('Event', EventSchema);
