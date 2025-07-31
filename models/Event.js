@@ -1,19 +1,37 @@
-
 const mongoose = require('mongoose');
+
 const EventSchema = new mongoose.Schema({
-  name: String,
+  name: {
+    type: String,
+    required: true
+  },
   description: String,
-  instagram: String,
-  website: String,
-  ticketLink: String,
   imageUrl: String,
-  address: String,
+  price: Number,
   location: {
     lat: Number,
     lng: Number
   },
+  instagram: String,
+  website: String,
+  ticketLink: String,
+  address: String,
   city: String,
+  venueName: String,
   date: Date,
-  price: Number
+  startDate: {
+    type: Date,
+    required: true
+  },
+  endDate: {
+    type: Date,
+    validate: {
+      validator: function(value) {
+        return !value || value > this.startDate;
+      },
+      message: 'End date must be after start date'
+    }
+  }
 });
+
 module.exports = mongoose.model('Event', EventSchema);

@@ -24,6 +24,7 @@ router.get('/:id', async (req, res) => {
 });
 
 
+
 // Update event
 router.put('/:id', protect, admin, async (req, res) => {
   try {
@@ -41,7 +42,10 @@ router.put('/:id', protect, admin, async (req, res) => {
       price,
       date,
       location,
-      image
+      image,
+      venueName,
+      startDate,
+      endDate
     } = req.body;
 
     // Upload new image if provided
@@ -61,6 +65,9 @@ router.put('/:id', protect, admin, async (req, res) => {
     event.price = price;
     event.date = date;
     event.location = location;
+    event.venueName = venueName;
+    event.startDate = startDate;
+    event.endDate = endDate;
 
     await event.save();
     res.status(200).json(event);
@@ -84,7 +91,10 @@ router.post('/', protect, admin, async (req, res) => {
       price,
       date,
       location,
-      image
+      image,
+      venueName,
+      startDate,
+      endDate
     } = req.body;
 
     let imageUrl = '';
@@ -104,7 +114,10 @@ router.post('/', protect, admin, async (req, res) => {
       price,
       date,
       location,
-      imageUrl
+      imageUrl,
+      venueName,
+      startDate,
+      endDate
     });
 
     await event.save();
