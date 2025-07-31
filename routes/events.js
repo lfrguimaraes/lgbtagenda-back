@@ -8,6 +8,44 @@ const cloudinary = require('../utils/cloudinary');
 const { geocodeAddress } = require('../utils/geocode');
 const auth = require('../middleware/authMiddleware');
 //const admin = require('../middleware/adminMiddleware');
+const axios = require('axios');
+
+router.post('/bulk', async (req, res) => {
+  try {
+    const inputEvents = req.body;
+
+    if (!Array.isArray(inputEvents)) {
+      return res.status(400).json({ message: "Payload must be an array of events" });
+    }
+
+    const eventsWithGeo = await Promise.all(
+      inputEvents.map(async (event) => {
+        if (!event.address) {
+          throw new Error(`Missing address for event: ${event.name}`);
+        }
+
+        const coords = await geocodeAddress(event.address);
+        if (!coords) {
+          throw new Error(`Failed to geocode address: ${event.address}`);
+        }
+
+        return {
+          ...event,
+          location: {
+            lat: coords.lat,
+            lng: coords.long
+          }
+        };
+      })
+    );
+
+    const savedEvents = await Event.insertMany(eventsWithGeo);
+    res.status(201).json({ message: "Events created successfully", events: savedEvents });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error while bulk creating events", error: err.message });
+  }
+});
 
 router.get('/', async (req, res) => {
   const { city, date } = req.query;
@@ -30,6 +68,7 @@ router.put('/:id', protect, admin, async (req, res) => {
   try {
     const event = await Event.findById(req.params.id);
     if (!event) return res.status(404).json({ message: 'Event not found' });
+    
 
     const {
       name,
@@ -77,6 +116,7 @@ router.put('/:id', protect, admin, async (req, res) => {
   }
 });
 
+
 // Create event
 router.post('/', protect, admin, async (req, res) => {
   try {
@@ -97,12 +137,26 @@ router.post('/', protect, admin, async (req, res) => {
       endDate
     } = req.body;
 
+    // ✅ Upload image to Cloudinary if provided
     let imageUrl = '';
     if (image) {
       const result = await cloudinary.uploader.upload(`data:image/jpeg;base64,${image}`);
       imageUrl = result.secure_url;
     }
 
+    // ✅ Geocode location if missing
+    let resolvedLocation = location;
+    if (!location?.lat || !location?.lng) {
+      const fullAddress = `${address}, ${city}`;
+      const coords = await geocodeAddress(fullAddress);
+      if (coords) {
+        resolvedLocation = { lat: coords.lat, lng: coords.lng };
+      } else {
+        console.warn('Geocoding failed for:', fullAddress);
+      }
+    }
+
+    // ✅ Save event
     const event = new Event({
       name,
       description,
@@ -113,7 +167,7 @@ router.post('/', protect, admin, async (req, res) => {
       city,
       price,
       date,
-      location,
+      location: resolvedLocation,
       imageUrl,
       venueName,
       startDate,
@@ -127,6 +181,9 @@ router.post('/', protect, admin, async (req, res) => {
     res.status(500).json({ message: 'Server error while creating event' });
   }
 });
+
+
+
 
 // Get all events
 router.get('/', async (req, res) => {
