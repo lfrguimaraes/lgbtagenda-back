@@ -11,8 +11,8 @@ async function geocodeAddress(address) {
     });
 
     if (res.data.features.length > 0) {
-      const [long, lat] = res.data.features[0].center;
-      return { lat, long };
+      const [lng, lat] = res.data.features[0].center;
+      return { lat, lng };
     }
     return null;
   }

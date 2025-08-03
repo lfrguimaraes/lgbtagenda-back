@@ -1,15 +1,46 @@
-
 const express = require('express');
 const router = express.Router();
+const mongoose = require('mongoose');
 const { protect } = require('../middleware/authMiddleware');
 const { admin } = require('../middleware/adminMiddleware');
 const Event = require('../models/Event');
 const cloudinary = require('../utils/cloudinary');
 const { geocodeAddress } = require('../utils/geocode');
 const auth = require('../middleware/authMiddleware');
-//const admin = require('../middleware/adminMiddleware');
 const axios = require('axios');
 
+// Create a single event
+router.post('/', protect, admin, async (req, res) => {
+  try {
+    const event = req.body;
+
+    if (!event.address) {
+      return res.status(400).json({ message: 'Address is required' });
+    }
+
+    const coords = await geocodeAddress(event.address);
+    if (!coords) {
+      return res.status(500).json({ message: 'Failed to geocode address' });
+    }
+
+    const newEvent = new Event({
+      ...event,
+      location: {
+        lat: coords.lat,
+        lng: coords.lng  // ✅ correct key
+      }
+    });
+
+    const savedEvent = await newEvent.save();
+    res.status(201).json(savedEvent);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error while creating event', error: err.message });
+  }
+});
+
+
+// Bulk event creation
 router.post('/bulk', async (req, res) => {
   try {
     const inputEvents = req.body;
@@ -33,7 +64,7 @@ router.post('/bulk', async (req, res) => {
           ...event,
           location: {
             lat: coords.lat,
-            lng: coords.long
+            lng: coords.lng
           }
         };
       })
@@ -47,164 +78,87 @@ router.post('/bulk', async (req, res) => {
   }
 });
 
+// Get events with optional filters
 router.get('/', async (req, res) => {
-  const { city, date } = req.query;
+  const { city, date, id } = req.query;
   const filter = {};
+
+  if (id) {
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'Invalid event ID in query' });
+    }
+    filter._id = id;
+  }
+
   if (city) filter.city = city;
   if (date) filter.date = { $gte: new Date(date) };
-  const events = await Event.find(filter);
-  res.json(events);
+
+  try {
+    const events = await Event.find(filter);
+    res.json(events);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
 });
 
+// Get a single event by ID
 router.get('/:id', async (req, res) => {
-  const event = await Event.findById(req.params.id);
-  res.json(event);
+  const { id } = req.params;
+
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return res.status(400).json({ message: 'Invalid event ID' });
+  }
+
+  try {
+    const event = await Event.findById(id);
+    if (!event) {
+      return res.status(404).json({ message: 'Event not found' });
+    }
+    res.json(event);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
 });
 
-
-
-// Update event
+// Update an event
 router.put('/:id', protect, admin, async (req, res) => {
+  const { id } = req.params;
+
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return res.status(400).json({ message: 'Invalid event ID' });
+  }
+
   try {
-    const event = await Event.findById(req.params.id);
-    if (!event) return res.status(404).json({ message: 'Event not found' });
-    
-
-    const {
-      name,
-      description,
-      instagram,
-      website,
-      ticketLink,
-      address,
-      city,
-      price,
-      date,
-      location,
-      image,
-      venueName,
-      startDate,
-      endDate
-    } = req.body;
-
-    // Upload new image if provided
-    if (image) {
-      const result = await cloudinary.uploader.upload(`data:image/jpeg;base64,${image}`);
-      event.imageUrl = result.secure_url;
+    const event = await Event.findByIdAndUpdate(id, req.body, { new: true });
+    if (!event) {
+      return res.status(404).json({ message: 'Event not found' });
     }
-
-    // Update other fields
-    event.name = name;
-    event.description = description;
-    event.instagram = instagram;
-    event.website = website;
-    event.ticketLink = ticketLink;
-    event.address = address;
-    event.city = city;
-    event.price = price;
-    event.date = date;
-    event.location = location;
-    event.venueName = venueName;
-    event.startDate = startDate;
-    event.endDate = endDate;
-
-    await event.save();
-    res.status(200).json(event);
+    res.json(event);
   } catch (err) {
-    console.error('Error updating event:', err);
-    res.status(500).json({ message: 'Server error while updating event' });
+    console.error(err);
+    res.status(500).json({ message: 'Server error', error: err.message });
   }
 });
 
-
-// Create event
-router.post('/', protect, admin, async (req, res) => {
-  try {
-    const {
-      name,
-      description,
-      instagram,
-      website,
-      ticketLink,
-      address,
-      city,
-      price,
-      date,
-      location,
-      image,
-      venueName,
-      startDate,
-      endDate
-    } = req.body;
-
-    // ✅ Upload image to Cloudinary if provided
-    let imageUrl = '';
-    if (image) {
-      const result = await cloudinary.uploader.upload(`data:image/jpeg;base64,${image}`);
-      imageUrl = result.secure_url;
-    }
-
-    // ✅ Geocode location if missing
-    let resolvedLocation = location;
-    if (!location?.lat || !location?.lng) {
-      const fullAddress = `${address}, ${city}`;
-      const coords = await geocodeAddress(fullAddress);
-      if (coords) {
-        resolvedLocation = { lat: coords.lat, lng: coords.lng };
-      } else {
-        console.warn('Geocoding failed for:', fullAddress);
-      }
-    }
-
-    // ✅ Save event
-    const event = new Event({
-      name,
-      description,
-      instagram,
-      website,
-      ticketLink,
-      address,
-      city,
-      price,
-      date,
-      location: resolvedLocation,
-      imageUrl,
-      venueName,
-      startDate,
-      endDate
-    });
-
-    await event.save();
-    res.status(201).json(event);
-  } catch (err) {
-    console.error('Error creating event:', err);
-    res.status(500).json({ message: 'Server error while creating event' });
-  }
-});
-
-
-
-
-// Get all events
-router.get('/', async (req, res) => {
-  try {
-    const events = await Event.find();
-    res.status(200).json(events);
-  } catch (err) {
-    res.status(500).json({ message: 'Error fetching events' });
-  }
-});
-
-// Delete event
+// Delete an event
 router.delete('/:id', protect, admin, async (req, res) => {
-  try {
-    const event = await Event.findById(req.params.id);
-    if (!event) return res.status(404).json({ message: 'Event not found' });
+  const { id } = req.params;
 
-    await event.deleteOne();
-    res.status(200).json({ message: 'Event deleted' });
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return res.status(400).json({ message: 'Invalid event ID' });
+  }
+
+  try {
+    const event = await Event.findByIdAndDelete(id);
+    if (!event) {
+      return res.status(404).json({ message: 'Event not found' });
+    }
+    res.json({ message: 'Event deleted successfully' });
   } catch (err) {
-    res.status(500).json({ message: 'Error deleting event' });
+    console.error(err);
+    res.status(500).json({ message: 'Server error', error: err.message });
   }
 });
 
